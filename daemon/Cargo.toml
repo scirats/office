@@ -1,0 +1,28 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/protocol",
+    "crates/execution",
+    "crates/broker",
+    "crates/workspace",
+    "crates/agent",
+    "crates/tool",
+    "crates/toolbox",
+    "crates/reconciliation",
+    "crates/officed",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+protocol = { path = "crates/protocol" }
+execution = { path = "crates/execution" }
+broker = { path = "crates/broker" }
+workspace = { path = "crates/workspace" }
+agent = { path = "crates/agent" }
+tool = { path = "crates/tool" }
+toolbox = { path = "crates/toolbox" }
+reconciliation = { path = "crates/reconciliation" }

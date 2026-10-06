@@ -1,0 +1,27 @@
+# Rust
+target/
+*.rs.bk
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+*.local
+
+# Tooling artifacts
+.playwright-mcp/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

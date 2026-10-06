@@ -1,0 +1,39 @@
+.office-winbox {
+  border-radius: 12px;
+  overflow: hidden;
+  background: color-mix(in oklch, var(--card) 94%, transparent);
+  border: 1px solid var(--border);
+  box-shadow: 0 24px 60px oklch(0 0 0 / 0.55);
+  font-family: var(--font-sans);
+}
+
+.office-winbox.focus {
+  border-color: color-mix(in oklch, var(--primary) 45%, var(--border));
+  box-shadow: 0 28px 70px oklch(0 0 0 / 0.6);
+}
+
+.office-winbox .wb-header {
+  height: 36px;
+  line-height: 36px;
+  color: var(--foreground);
+  background: color-mix(in oklch, var(--card) 82%, transparent);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+}
+
+.office-winbox .wb-title {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.office-winbox .wb-body {
+  top: 36px;
+  background: var(--card);
+  color: var(--card-foreground);
+}
+
+.office-app {
+  height: 100%;
+  width: 100%;
+}

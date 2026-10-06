@@ -1,0 +1,75 @@
+.react-flow {
+  --xy-background-color: transparent;
+  --xy-edge-stroke-default: var(--border);
+  --xy-edge-stroke-selected-default: var(--primary);
+  --xy-connectionline-stroke-default: var(--primary);
+  --xy-handle-background-color-default: var(--muted-foreground);
+  --xy-handle-border-color-default: var(--card);
+  --xy-minimap-background-color-default: var(--card);
+  --xy-attribution-background-color-default: transparent;
+  font-family: var(--font-sans);
+}
+
+.react-flow__node,
+.react-flow__edge {
+  transition: opacity 160ms ease;
+}
+
+.react-flow__node.is-dim,
+.react-flow__edge.is-dim {
+  opacity: 0.12;
+}
+
+.react-flow .react-flow__edge.graph-edge .react-flow__edge-path {
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+
+.react-flow .react-flow__edge.graph-edge.selected .react-flow__edge-path,
+.react-flow .react-flow__edge.graph-edge.is-active .react-flow__edge-path {
+  stroke: var(--primary);
+  stroke-width: 2.5;
+}
+
+.graph-handle {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--card);
+  border-radius: 9999px;
+  background: var(--muted-foreground);
+  transition: background-color 150ms ease;
+}
+
+.graph-handle:hover {
+  background: var(--primary);
+}
+
+.react-flow__attribution {
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+.react-flow__controls {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.2);
+}
+
+.react-flow__controls-button {
+  background-color: var(--card);
+  border-bottom: 1px solid var(--border);
+  color: var(--foreground);
+  fill: var(--foreground);
+}
+
+.react-flow__controls-button:hover {
+  background-color: var(--accent);
+}
+
+.react-flow__minimap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
