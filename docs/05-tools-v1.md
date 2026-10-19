@@ -103,7 +103,8 @@ sus `name` (ids).
 
 ## Pendiente
 
-1. Implementación del ejecutor de cada tool y su binding al sandbox.
+1. Implementación del ejecutor de cada tool y su binding al sandbox
+   (`docs/10`: sólo `shell` en V1).
 2. Permisos/capacidades por tool (qué concede cada una).
 3. Versionado del catálogo y compatibilidad de definiciones ante cambios.
 4. Flag `strict` de function calling (validación estricta del JSON Schema).

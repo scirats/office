@@ -5,9 +5,15 @@ members = [
     "crates/execution",
     "crates/broker",
     "crates/workspace",
+    "crates/project",
     "crates/agent",
     "crates/tool",
     "crates/toolbox",
+    "crates/model",
+    "crates/inference",
+    "crates/runner",
+    "crates/sandbox",
+    "crates/secret",
     "crates/reconciliation",
     "crates/officed",
 ]
@@ -22,7 +28,13 @@ protocol = { path = "crates/protocol" }
 execution = { path = "crates/execution" }
 broker = { path = "crates/broker" }
 workspace = { path = "crates/workspace" }
+project = { path = "crates/project" }
 agent = { path = "crates/agent" }
 tool = { path = "crates/tool" }
 toolbox = { path = "crates/toolbox" }
+model = { path = "crates/model" }
+inference = { path = "crates/inference" }
+runner = { path = "crates/runner" }
+sandbox = { path = "crates/sandbox" }
+secret = { path = "crates/secret" }
 reconciliation = { path = "crates/reconciliation" }

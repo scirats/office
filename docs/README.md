@@ -25,6 +25,11 @@ Este directorio captura las decisiones que vamos tomando al revisar `../PROMPT.m
 | [03-agente-identidad-recursos.md](03-agente-identidad-recursos.md) | Identidad de ejecución, niveles de recursos y credenciales | aceptado |
 | [04-agentes-v1.md](04-agentes-v1.md) | Contrato del engranaje `agent` (definiciones e instancias) | aceptado |
 | [05-tools-v1.md](05-tools-v1.md) | Contrato del engranaje `tool` (catálogo definido en código) | aceptado |
+| [06-modelos-v1.md](06-modelos-v1.md) | Contrato del engranaje `model` (catálogo de modelos y proveedores) | aceptado |
+| [07-secretos-v1.md](07-secretos-v1.md) | Contrato del engranaje `secret` (store de credenciales, archivo 0600) | aceptado |
+| [08-proyectos-v1.md](08-proyectos-v1.md) | Contrato del engranaje `project` (proyectos por workspace, agentes opcionales) | aceptado |
+| [09-ejecucion-modelo-v1.md](09-ejecucion-modelo-v1.md) | Contrato del engranaje `inference` (chat OpenAI-compatible y streaming) | aceptado |
+| [10-tool-calling-v1.md](10-tool-calling-v1.md) | Tool calling y sandbox: engranajes `runner` y `sandbox` | aceptado |
 
 Próximos documentos (a crear cuando los abordemos): lifecycle padre/hijo, UID/GID, threat model, build-vs-reuse.
 

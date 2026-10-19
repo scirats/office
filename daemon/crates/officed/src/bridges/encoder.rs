@@ -14,7 +14,9 @@ impl Encoder {
         let payload = serde_json::to_value(data).expect("outgoing payload is serializable");
         let mut event = CloudEvent::new(new_event_id(), DAEMON_SOURCE, type_, payload);
         event.time = Some(SystemClock.now_rfc3339());
-        event.subject = subject.map(str::to_owned);
+        if let Some(subject) = subject {
+            event = event.with_subject(subject);
+        }
         event
     }
 
@@ -131,6 +133,19 @@ impl Encoder {
         self.daemon_event(types::event::WORKSPACE_LISTED, subject, payload)
     }
 
+    pub fn workspace_deleted(
+        &self,
+        subject: &str,
+        payload: event::WorkspaceDeleted,
+        correlation: Option<&str>,
+    ) -> CloudEvent {
+        let deleted = self.daemon_event(types::event::WORKSPACE_DELETED, Some(subject), payload);
+        match correlation {
+            Some(value) => deleted.with_correlation(value),
+            None => deleted,
+        }
+    }
+
     pub fn workspace_status_changed(
         &self,
         subject: &str,
@@ -141,6 +156,40 @@ impl Encoder {
             Some(subject),
             payload,
         )
+    }
+
+    pub fn project_created(
+        &self,
+        subject: &str,
+        payload: event::ProjectView,
+        correlation: Option<&str>,
+    ) -> CloudEvent {
+        let created = self.daemon_event(types::event::PROJECT_CREATED, Some(subject), payload);
+        match correlation {
+            Some(value) => created.with_correlation(value),
+            None => created,
+        }
+    }
+
+    pub fn project_listed(
+        &self,
+        subject: Option<&str>,
+        payload: event::ProjectListed,
+    ) -> CloudEvent {
+        self.daemon_event(types::event::PROJECT_LISTED, subject, payload)
+    }
+
+    pub fn project_deleted(
+        &self,
+        subject: &str,
+        payload: event::ProjectDeleted,
+        correlation: Option<&str>,
+    ) -> CloudEvent {
+        let deleted = self.daemon_event(types::event::PROJECT_DELETED, Some(subject), payload);
+        match correlation {
+            Some(value) => deleted.with_correlation(value),
+            None => deleted,
+        }
     }
 
     pub fn agent_definition_created(
@@ -166,6 +215,23 @@ impl Encoder {
         payload: event::AgentDefinitionListed,
     ) -> CloudEvent {
         self.daemon_event(types::event::AGENT_DEFINITION_LISTED, subject, payload)
+    }
+
+    pub fn agent_definition_deleted(
+        &self,
+        subject: &str,
+        payload: event::AgentDefinitionDeleted,
+        correlation: Option<&str>,
+    ) -> CloudEvent {
+        let deleted = self.daemon_event(
+            types::event::AGENT_DEFINITION_DELETED,
+            Some(subject),
+            payload,
+        );
+        match correlation {
+            Some(value) => deleted.with_correlation(value),
+            None => deleted,
+        }
     }
 
     pub fn agent_instance_created(
@@ -200,5 +266,26 @@ impl Encoder {
 
     pub fn tool_listed(&self, subject: Option<&str>, payload: event::ToolListed) -> CloudEvent {
         self.daemon_event(types::event::TOOL_LISTED, subject, payload)
+    }
+
+    pub fn model_listed(&self, subject: Option<&str>, payload: event::ModelListed) -> CloudEvent {
+        self.daemon_event(types::event::MODEL_LISTED, subject, payload)
+    }
+
+    pub fn secret_listed(&self, subject: Option<&str>, payload: event::SecretListed) -> CloudEvent {
+        self.daemon_event(types::event::SECRET_LISTED, subject, payload)
+    }
+
+    pub fn secret_updated(
+        &self,
+        subject: &str,
+        payload: event::SecretUpdated,
+        correlation: Option<&str>,
+    ) -> CloudEvent {
+        let updated = self.daemon_event(types::event::SECRET_UPDATED, Some(subject), payload);
+        match correlation {
+            Some(value) => updated.with_correlation(value),
+            None => updated,
+        }
     }
 }

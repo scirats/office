@@ -1,0 +1,1 @@
+ALTER TABLE agent_definitions ADD COLUMN model TEXT NOT NULL DEFAULT '';

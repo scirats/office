@@ -1,11 +1,26 @@
+mod bwrap;
 mod clock;
+mod host;
+mod http;
 mod ids;
+mod inference_chat;
 mod inspector;
+mod landlock;
+mod models;
+mod process;
 mod provisioner;
+mod secrets;
 mod sqlite;
+mod tools;
 
+pub use bwrap::BwrapSandbox;
 pub use clock::SystemClock;
+pub use http::ReqwestHttpClient;
 pub use ids::{UuidV7Generator, new_connection_id, new_event_id};
+pub use inference_chat::InferenceChat;
 pub use inspector::PlatformWorkspaceInspector;
+pub use models::{FileModelCatalog, ModelConfigError};
 pub use provisioner::PlatformUserProvisioner;
+pub use secrets::{FileSecretStore, SecretConfigError};
 pub use sqlite::SqliteStore;
+pub use tools::ToolExecutor;

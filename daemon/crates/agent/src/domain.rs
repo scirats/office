@@ -36,9 +36,10 @@ pub struct AgentDefinition {
     pub name: String,
     pub role: String,
     pub prompt: String,
-    /// Tool ids from the catalog. `agent` does not know the `tool` gear; ids
-    /// cross the bridge and are resolved by the composition.
+
     pub tools: Vec<String>,
+
+    pub model: String,
     pub version: u32,
 }
 

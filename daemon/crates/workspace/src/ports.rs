@@ -8,12 +8,15 @@ pub struct Provisioned {
 
 pub trait UserProvisioner: Send + Sync {
     fn provision(&self, slug: &str) -> Result<Provisioned, ProvisionError>;
+    fn deprovision(&self, user: &str, home: &str) -> Result<(), ProvisionError>;
 }
 
 pub trait WorkspaceRepository: Send + Sync {
     fn save(&self, workspace: &Workspace) -> Result<(), StoreError>;
+    fn find(&self, slug: &str) -> Result<Option<WorkspaceRecord>, StoreError>;
     fn list(&self) -> Result<Vec<WorkspaceRecord>, StoreError>;
     fn set_status(&self, slug: &str, status: &str) -> Result<(), StoreError>;
+    fn remove(&self, slug: &str) -> Result<bool, StoreError>;
 }
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]

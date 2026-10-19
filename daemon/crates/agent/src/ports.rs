@@ -14,6 +14,7 @@ pub trait AgentRepository: Send + Sync {
     fn save_definition(&self, definition: &AgentDefinition) -> Result<(), StoreError>;
     fn find_definition(&self, id: &str) -> Result<Option<AgentDefinition>, StoreError>;
     fn list_definitions(&self) -> Result<Vec<AgentDefinition>, StoreError>;
+    fn remove_definition(&self, id: &str) -> Result<bool, StoreError>;
 
     fn save_instance(&self, instance: &AgentInstance) -> Result<(), StoreError>;
     fn find_instance(

@@ -4,6 +4,8 @@
 @import "@xyflow/react/dist/style.css";
 @import "@fontsource-variable/geist";
 
+@plugin "@tailwindcss/typography";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

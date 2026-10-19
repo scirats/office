@@ -27,32 +27,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (mut websocket, _) = tokio_tungstenite::client_async(request, stream).await?;
     println!("connected to {}", socket.display());
 
-    send(
-        &mut websocket,
-        CloudEvent::new(
+    for (id, type_, data) in [
+        (
             "smoke-sub",
-            "/office/client/smoke",
             types::command::SUBSCRIPTION_ADD,
             json!({ "filter": {} }),
         ),
-    )
-    .await;
-
-    send(
-        &mut websocket,
-        CloudEvent::new(
-            "smoke-task",
-            "/office/client/smoke",
-            types::command::TASK_SUBMIT,
-            json!({
-                "company": "acme",
-                "project": "ecommerce",
-                "agent": "backend-engineer",
-                "input": "fix checkout"
-            }),
+        ("smoke-tools", types::command::TOOL_LIST, json!({})),
+        ("smoke-models", types::command::MODEL_LIST, json!({})),
+        (
+            "smoke-workspaces",
+            types::command::WORKSPACE_LIST,
+            json!({}),
         ),
-    )
-    .await;
+    ] {
+        send(
+            &mut websocket,
+            CloudEvent::new(id, "/office/client/smoke", type_, data),
+        )
+        .await;
+    }
 
     let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
     loop {

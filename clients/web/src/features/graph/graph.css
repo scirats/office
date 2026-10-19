@@ -31,6 +31,44 @@
   stroke-width: 2.5;
 }
 
+.react-flow .react-flow__edge .graph-edge-delete {
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: opacity 140ms ease;
+}
+
+.react-flow .react-flow__edge:hover .graph-edge-delete {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.react-flow .graph-edge-delete-bg {
+  fill: var(--card);
+  stroke: var(--border);
+  stroke-width: 1;
+  transition:
+    fill 140ms ease,
+    stroke 140ms ease;
+}
+
+.react-flow .graph-edge-delete-mark {
+  fill: none;
+  stroke: var(--muted-foreground);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  transition: stroke 140ms ease;
+}
+
+.react-flow .graph-edge-delete:hover .graph-edge-delete-bg {
+  fill: var(--destructive);
+  stroke: var(--destructive);
+}
+
+.react-flow .graph-edge-delete:hover .graph-edge-delete-mark {
+  stroke: var(--card);
+}
+
 .graph-handle {
   width: 10px;
   height: 10px;

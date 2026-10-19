@@ -5,6 +5,8 @@ use crate::ports::{ProvisionError, StoreError, UserProvisioner, WorkspaceReposit
 pub enum WorkspaceError {
     #[error("invalid workspace name")]
     InvalidName,
+    #[error("workspace not found: {0}")]
+    UnknownWorkspace(String),
     #[error(transparent)]
     Provision(#[from] ProvisionError),
     #[error(transparent)]
@@ -49,6 +51,17 @@ impl WorkspaceService {
         Ok(self.repository.list()?)
     }
 
+    pub fn delete(&self, slug: &str) -> Result<WorkspaceRecord, WorkspaceError> {
+        let record = self
+            .repository
+            .find(slug)?
+            .ok_or_else(|| WorkspaceError::UnknownWorkspace(slug.to_owned()))?;
+
+        self.provisioner.deprovision(&record.user, &record.home)?;
+        self.repository.remove(slug)?;
+        Ok(record)
+    }
+
     pub fn set_status(&self, slug: &str, status: &str) -> Result<(), WorkspaceError> {
         self.repository.set_status(slug, status)?;
         Ok(())
@@ -81,6 +94,14 @@ mod tests {
                 home: format!("/home/{slug}"),
             })
         }
+
+        fn deprovision(&self, user: &str, _home: &str) -> Result<(), ProvisionError> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("deprovision:{user}"));
+            Ok(())
+        }
     }
 
     #[derive(Default)]
@@ -101,6 +122,16 @@ mod tests {
             Ok(())
         }
 
+        fn find(&self, slug: &str) -> Result<Option<WorkspaceRecord>, StoreError> {
+            Ok(self
+                .records
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|record| record.slug == slug)
+                .cloned())
+        }
+
         fn list(&self) -> Result<Vec<WorkspaceRecord>, StoreError> {
             Ok(self.records.lock().unwrap().clone())
         }
@@ -112,6 +143,13 @@ mod tests {
                 }
             }
             Ok(())
+        }
+
+        fn remove(&self, slug: &str) -> Result<bool, StoreError> {
+            let mut records = self.records.lock().unwrap();
+            let before = records.len();
+            records.retain(|record| record.slug != slug);
+            Ok(records.len() != before)
         }
     }
 
@@ -153,6 +191,10 @@ mod tests {
             fn provision(&self, _slug: &str) -> Result<Provisioned, ProvisionError> {
                 Err(ProvisionError::Unsupported)
             }
+
+            fn deprovision(&self, _user: &str, _home: &str) -> Result<(), ProvisionError> {
+                Err(ProvisionError::Unsupported)
+            }
         }
 
         let service =
@@ -161,5 +203,60 @@ mod tests {
             service.create("acme"),
             Err(WorkspaceError::Provision(ProvisionError::Unsupported))
         ));
+    }
+
+    #[test]
+    fn deletes_existing_workspace_and_deprovisions() {
+        let service = service();
+        service.create("Acme Corp").expect("creates");
+
+        let removed = service.delete("acme-corp").expect("deletes");
+        assert_eq!(removed.slug, "acme-corp");
+        assert_eq!(removed.user, "acme-corp");
+        assert!(service.list().expect("lists").is_empty());
+    }
+
+    #[test]
+    fn rejects_deleting_unknown_workspace() {
+        let service = service();
+        assert!(matches!(
+            service.delete("ghost"),
+            Err(WorkspaceError::UnknownWorkspace(slug)) if slug == "ghost"
+        ));
+    }
+
+    #[test]
+    fn keeps_record_when_deprovision_fails() {
+        struct Failing;
+        impl UserProvisioner for Failing {
+            fn provision(&self, _slug: &str) -> Result<Provisioned, ProvisionError> {
+                Err(ProvisionError::Unsupported)
+            }
+
+            fn deprovision(&self, user: &str, _home: &str) -> Result<(), ProvisionError> {
+                Err(ProvisionError::Command {
+                    action: "userdel".to_owned(),
+                    target: user.to_owned(),
+                    message: "user is currently used by process".to_owned(),
+                })
+            }
+        }
+
+        let repository = FakeRepository::default();
+        repository
+            .save(&Workspace {
+                name: "Acme".to_owned(),
+                slug: "acme".to_owned(),
+                user: "acme".to_owned(),
+                home: "/home/acme".to_owned(),
+            })
+            .expect("saves");
+
+        let service = WorkspaceService::new(Box::new(Failing), Box::new(repository));
+        assert!(matches!(
+            service.delete("acme"),
+            Err(WorkspaceError::Provision(_))
+        ));
+        assert_eq!(service.list().expect("lists").len(), 1);
     }
 }

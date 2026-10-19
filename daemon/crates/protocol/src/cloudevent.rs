@@ -18,6 +18,7 @@ pub struct CloudEvent {
     pub subject: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub datacontenttype: Option<String>,
+
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dataschema: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -52,11 +53,6 @@ impl CloudEvent {
         }
     }
 
-    pub fn with_time(mut self, time: impl Into<String>) -> Self {
-        self.time = Some(time.into());
-        self
-    }
-
     pub fn with_subject(mut self, subject: impl Into<String>) -> Self {
         self.subject = Some(subject.into());
         self
@@ -67,18 +63,8 @@ impl CloudEvent {
         self
     }
 
-    pub fn with_causation(mut self, causation_id: impl Into<String>) -> Self {
-        self.causationid = Some(causation_id.into());
-        self
-    }
-
     pub fn with_sequence(mut self, sequence: u64) -> Self {
         self.sequence = Some(sequence);
-        self
-    }
-
-    pub fn with_dataschema(mut self, schema: impl Into<String>) -> Self {
-        self.dataschema = Some(schema.into());
         self
     }
 

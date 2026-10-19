@@ -3,25 +3,6 @@ use std::collections::HashMap;
 use crate::domain::{DomainEvent, ExecutionId, ExecutionState, LogStream, TaskId};
 use crate::ports::{Clock, IdGenerator};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AcceptTask {
-    pub company: String,
-    pub project: String,
-    pub agent: String,
-    pub input: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Execution {
-    pub id: ExecutionId,
-    pub task_id: TaskId,
-    pub state: ExecutionState,
-    pub company: String,
-    pub project: String,
-    pub agent: String,
-    pub input: String,
-}
-
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum ExecutionError {
     #[error("execution not found: {0}")]
@@ -36,7 +17,8 @@ pub enum ExecutionError {
 pub struct ExecutionService<C: Clock, I: IdGenerator> {
     clock: C,
     ids: I,
-    executions: HashMap<String, Execution>,
+
+    executions: HashMap<String, ExecutionState>,
 }
 
 impl<C: Clock, I: IdGenerator> ExecutionService<C, I> {
@@ -48,21 +30,13 @@ impl<C: Clock, I: IdGenerator> ExecutionService<C, I> {
         }
     }
 
-    pub fn accept_task(&mut self, command: AcceptTask) -> Vec<DomainEvent> {
+    pub fn accept_task(&mut self) -> Vec<DomainEvent> {
         let now = self.clock.now_rfc3339();
         let task_id = TaskId(self.ids.task_id());
         let execution_id = ExecutionId(self.ids.execution_id());
 
-        let execution = Execution {
-            id: execution_id.clone(),
-            task_id: task_id.clone(),
-            state: ExecutionState::Created,
-            company: command.company,
-            project: command.project,
-            agent: command.agent,
-            input: command.input,
-        };
-        self.executions.insert(execution_id.0.clone(), execution);
+        self.executions
+            .insert(execution_id.0.clone(), ExecutionState::Created);
 
         vec![DomainEvent::TaskAccepted {
             task_id,
@@ -77,19 +51,19 @@ impl<C: Clock, I: IdGenerator> ExecutionService<C, I> {
         to: ExecutionState,
     ) -> Result<Vec<DomainEvent>, ExecutionError> {
         let now = self.clock.now_rfc3339();
-        let execution = self
+        let state = self
             .executions
             .get_mut(execution_id.as_str())
             .ok_or_else(|| ExecutionError::NotFound(execution_id.0.clone()))?;
 
-        let from = execution.state;
+        let from = *state;
         if !from.can_transition_to(to) {
             return Err(ExecutionError::InvalidTransition {
                 from: from.as_str(),
                 to: to.as_str(),
             });
         }
-        execution.state = to;
+        *state = to;
 
         Ok(vec![DomainEvent::StateChanged {
             execution_id: execution_id.clone(),
@@ -124,10 +98,6 @@ impl<C: Clock, I: IdGenerator> ExecutionService<C, I> {
             at: now,
         }])
     }
-
-    pub fn get(&self, execution_id: &ExecutionId) -> Option<&Execution> {
-        self.executions.get(execution_id.as_str())
-    }
 }
 
 #[cfg(test)]
@@ -160,12 +130,7 @@ mod tests {
     }
 
     fn accept(service: &mut ExecutionService<FixedClock, SequentialIds>) -> ExecutionId {
-        let events = service.accept_task(AcceptTask {
-            company: "acme".into(),
-            project: "ecommerce".into(),
-            agent: "backend-engineer".into(),
-            input: "fix checkout".into(),
-        });
+        let events = service.accept_task();
         match &events[0] {
             DomainEvent::TaskAccepted { execution_id, .. } => execution_id.clone(),
             other => panic!("expected TaskAccepted, got {other:?}"),
@@ -176,7 +141,17 @@ mod tests {
     fn accept_task_creates_execution_in_created_state() {
         let mut service = service();
         let id = accept(&mut service);
-        assert_eq!(service.get(&id).unwrap().state, ExecutionState::Created);
+
+        let events = service
+            .transition(&id, ExecutionState::Preparing)
+            .expect("transitions");
+        match &events[0] {
+            DomainEvent::StateChanged { from, to, .. } => {
+                assert_eq!(*from, ExecutionState::Created);
+                assert_eq!(*to, ExecutionState::Preparing);
+            }
+            other => panic!("expected StateChanged, got {other:?}"),
+        }
     }
 
     #[test]

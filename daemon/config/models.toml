@@ -1,0 +1,77 @@
+# Office model catalog.
+#
+# Installation-level config (PROMPT §11). It describes providers and models;
+# it never stores secrets. `credential_ref` is a key the secret store resolves
+# per execution (docs/03 §49–51).
+#
+# Point the daemon at this file with OFFICE_MODELS, or install it at
+# /etc/office/models.toml.
+
+[[provider]]
+id = "anthropic"
+kind = "anthropic"
+endpoint = "https://api.anthropic.com"
+credential_ref = "provider/anthropic"
+
+[[provider]]
+id = "openai"
+kind = "openai"
+endpoint = "https://api.openai.com/v1"
+credential_ref = "provider/openai"
+
+[[provider]]
+id = "deepseek"
+kind = "deepseek"
+endpoint = "https://api.deepseek.com"
+credential_ref = "provider/deepseek"
+
+[[provider]]
+id = "local"
+kind = "local"
+endpoint = "http://127.0.0.1:11434/v1"
+credential_ref = "provider/local"
+
+[[model]]
+id = "claude-sonnet"
+provider = "anthropic"
+api_name = "claude-sonnet-4-20250514"
+display_name = "Claude Sonnet"
+context_window = 200000
+max_output_tokens = 8192
+capabilities = { tool_calling = true, vision = true, reasoning = false }
+
+[[model]]
+id = "gpt-4o"
+provider = "openai"
+api_name = "gpt-4o"
+display_name = "GPT-4o"
+context_window = 128000
+max_output_tokens = 16384
+capabilities = { tool_calling = true, vision = true, reasoning = false }
+
+[[model]]
+id = "deepseek-flash"
+provider = "deepseek"
+api_name = "deepseek-flash"
+display_name = "DeepSeek V4.1 Flash"
+context_window = 1048576
+max_output_tokens = 384000
+capabilities = { tool_calling = true, vision = true, reasoning = true }
+
+[[model]]
+id = "deepseek-v4-pro"
+provider = "deepseek"
+api_name = "deepseek-v4-pro"
+display_name = "DeepSeek V4 Pro"
+context_window = 1048576
+max_output_tokens = 384000
+capabilities = { tool_calling = true, vision = false, reasoning = true }
+
+[[model]]
+id = "llama-local"
+provider = "local"
+api_name = "llama3.1"
+display_name = "Llama 3.1 (local)"
+context_window = 131072
+max_output_tokens = 4096
+capabilities = { tool_calling = true, vision = false, reasoning = false }

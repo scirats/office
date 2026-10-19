@@ -13,12 +13,15 @@ Incluido:
 - transporte WebSocket sobre Unix socket, subprotocolo negociado `office.v1`;
 - envelope CloudEvents 1.0 (structured JSON, un evento por frame);
 - comandos: `subscription.add`, `subscription.remove`, `subscription.resume`,
-  `task.submit`, `execution.cancel`;
+  `task.submit`, `execution.cancel`, `workspace.create`, `workspace.list`,
+  `workspace.delete`, `model.list`, `secret.list`, `secret.set`;
 - eventos: `command.accepted`, `command.rejected`, `task.accepted`,
-  `execution.state_changed`, `execution.log`, `error`;
+  `execution.state_changed`, `execution.log`, `workspace.created`,
+  `workspace.listed`, `workspace.deleted`, `model.listed`, `secret.listed`,
+  `secret.updated`, `error`;
 - historia de eventos ordenada con secuencia por `subject`;
 - replay por cursor y detección de `resync_required`;
-- lifecycle de ejecución simulado (state machine) como demostración.
+- ejecución real contra el proveedor del agente (ver `docs/09`).
 
 Excluido (a propósito): persistencia, sandbox Linux real, autenticación,
 métricas, artifacts.
@@ -30,7 +33,8 @@ métricas, artifacts.
 | `protocol` | Vocabulario de la wire: envelope CloudEvents y taxonomía v1 | ninguno |
 | `execution` | Ciclo de vida y máquina de estados de una ejecución | `Clock`, `IdGenerator` |
 | `broker` | Historia ordenada, secuencia, suscripciones y replay | ninguno |
-| `officed` | Composición, adaptadores (reloj, ids, transporte) y puentes | — |
+| `inference` | Chat completions OpenAI-compatible y streaming SSE | `HttpClient` |
+| `officed` | Composición, adaptadores (reloj, ids, transporte, HTTP) y puentes | — |
 
 Los engranajes no se conocen entre sí: solo `officed` los une por puentes
 (`bridges/encoder.rs` y el despacho en `daemon.rs`).
@@ -49,6 +53,16 @@ Los engranajes no se conocen entre sí: solo `officed` los une por puentes
   cursor quedó fuera del buffer, responde `office.error.v1` con
   `code = resync_required`.
 
+## Workspaces
+
+`workspace.create` provisiona la identidad Linux del workspace
+(`groupadd` + `useradd --create-home`, home `0700`) y persiste el registro en
+SQLite. `workspace.delete` es el inverso: desprovisiona el usuario/grupo/home y
+borra el registro. Rechaza el borrado si el workspace todavía tiene instancias
+de agente enlazadas (`command_failed`), y es idempotente respecto de usuarios o
+homes ya ausentes. Ambos emiten el evento correspondiente
+(`workspace.created` / `workspace.deleted`) bajo el subject `workspace:<slug>`.
+
 ## Ejecución
 
 ```bash
@@ -66,7 +80,21 @@ negociar el subprotocolo `office.v1` y hablar CloudEvents.
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
+cargo deny check      # auditoría de dependencias (deny.toml)
 ```
+
+## Logs
+
+Office emite logs **estructurados** con `tracing` a stderr; nivel por `RUST_LOG`
+(default `info`). Se distinguen por `target`:
+
+- `office.reconciliation` — estado observado vs esperado.
+- `office.security` — inconsistencias (workspace con usuario/home incorrectos).
+- `office.execution` — fallos/limpieza de ejecuciones.
+
+Los `execution.log` (stdout/stderr/tool) **no** son logs del daemon: viajan como
+eventos del protocolo y se asocian a su `execution_id`. Concuerda con
+`PROMPT.md` §70 (no mezclar logs de Office, de ejecución y de seguridad).
 
 ## Decisiones y desviaciones
 

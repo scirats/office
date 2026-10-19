@@ -10,6 +10,7 @@ pub struct DefineAgent {
     pub role: String,
     pub prompt: String,
     pub tools: Vec<String>,
+    pub model: String,
 }
 
 impl DefineAgent {
@@ -18,12 +19,14 @@ impl DefineAgent {
         role: impl Into<String>,
         prompt: impl Into<String>,
         tools: Vec<String>,
+        model: impl Into<String>,
     ) -> Self {
         Self {
             name: name.into(),
             role: role.into(),
             prompt: prompt.into(),
             tools,
+            model: model.into(),
         }
     }
 }
@@ -36,10 +39,14 @@ pub enum AgentError {
     InvalidRole,
     #[error("tool name is empty")]
     InvalidTool,
+    #[error("model id is empty")]
+    InvalidModel,
     #[error("workspace or project is not a valid slug")]
     InvalidScope,
     #[error("agent definition not found: {0}")]
     UnknownAgent(String),
+    #[error("agent definition is still linked to {0} project(s)")]
+    StillLinked(usize),
     #[error("agent is already linked to this project")]
     AlreadyLinked,
     #[error(transparent)]
@@ -83,6 +90,9 @@ impl AgentService {
         if input.tools.iter().any(|id| id.trim().is_empty()) || has_duplicates(&input.tools) {
             return Err(AgentError::InvalidTool);
         }
+        if input.model.trim().is_empty() {
+            return Err(AgentError::InvalidModel);
+        }
 
         let version = self
             .repository
@@ -96,6 +106,7 @@ impl AgentService {
             role: input.role.trim().to_owned(),
             prompt: input.prompt,
             tools: input.tools,
+            model: input.model.trim().to_owned(),
             version,
         };
 
@@ -105,6 +116,24 @@ impl AgentService {
 
     pub fn list_definitions(&self) -> Result<Vec<AgentDefinition>, AgentError> {
         Ok(self.repository.list_definitions()?)
+    }
+
+    pub fn delete_definition(&self, id: &str) -> Result<String, AgentError> {
+        let definition = self
+            .repository
+            .find_definition(id)?
+            .ok_or_else(|| AgentError::UnknownAgent(id.to_owned()))?;
+        let linked = self
+            .repository
+            .list_instances(None, None)?
+            .into_iter()
+            .filter(|instance| instance.agent.as_str() == id)
+            .count();
+        if linked > 0 {
+            return Err(AgentError::StillLinked(linked));
+        }
+        self.repository.remove_definition(id)?;
+        Ok(definition.id.0)
     }
 
     pub fn link(
@@ -189,6 +218,13 @@ mod tests {
 
         fn list_definitions(&self) -> Result<Vec<AgentDefinition>, StoreError> {
             Ok(self.definitions.lock().unwrap().clone())
+        }
+
+        fn remove_definition(&self, id: &str) -> Result<bool, StoreError> {
+            let mut definitions = self.definitions.lock().unwrap();
+            let before = definitions.len();
+            definitions.retain(|item| item.id.as_str() != id);
+            Ok(definitions.len() != before)
         }
 
         fn save_instance(&self, instance: &AgentInstance) -> Result<(), StoreError> {
@@ -294,6 +330,7 @@ mod tests {
                 "backend",
                 "system prompt",
                 tools,
+                "claude-sonnet",
             ))
             .expect("defines")
     }
@@ -316,11 +353,11 @@ mod tests {
     fn rejects_invalid_name_and_role() {
         let service = service();
         assert!(matches!(
-            service.define(DefineAgent::new("!!!", "backend", "p", vec![])),
+            service.define(DefineAgent::new("!!!", "backend", "p", vec![], "claude")),
             Err(AgentError::InvalidName)
         ));
         assert!(matches!(
-            service.define(DefineAgent::new("Agent", "", "p", vec![])),
+            service.define(DefineAgent::new("Agent", "", "p", vec![], "claude")),
             Err(AgentError::InvalidRole)
         ));
         assert!(matches!(
@@ -328,7 +365,8 @@ mod tests {
                 "Agent",
                 "backend",
                 "p",
-                vec!["  ".to_owned()]
+                vec!["  ".to_owned()],
+                "claude"
             )),
             Err(AgentError::InvalidTool)
         ));
@@ -337,9 +375,19 @@ mod tests {
                 "Agent",
                 "backend",
                 "p",
-                vec!["shell".to_owned(), "shell".to_owned()]
+                vec!["shell".to_owned(), "shell".to_owned()],
+                "claude"
             )),
             Err(AgentError::InvalidTool)
+        ));
+    }
+
+    #[test]
+    fn rejects_empty_model() {
+        let service = service();
+        assert!(matches!(
+            service.define(DefineAgent::new("Agent", "backend", "p", vec![], "  ")),
+            Err(AgentError::InvalidModel)
         ));
     }
 
@@ -417,5 +465,32 @@ mod tests {
             None
         );
         assert_eq!(service.list_instances(None, None).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn deletes_only_unlinked_definitions() {
+        let service = service();
+        assert!(matches!(
+            service.delete_definition("ghost"),
+            Err(AgentError::UnknownAgent(id)) if id == "ghost"
+        ));
+
+        define(&service);
+        service
+            .link("backend-engineer", "acme", "ecommerce")
+            .expect("links");
+        assert!(matches!(
+            service.delete_definition("backend-engineer"),
+            Err(AgentError::StillLinked(1))
+        ));
+
+        service
+            .unlink("backend-engineer", "acme", "ecommerce")
+            .expect("unlinks");
+        assert_eq!(
+            service.delete_definition("backend-engineer").unwrap(),
+            "backend-engineer"
+        );
+        assert!(service.list_definitions().unwrap().is_empty());
     }
 }

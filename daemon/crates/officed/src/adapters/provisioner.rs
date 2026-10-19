@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 use workspace::{ProvisionError, Provisioned, UserProvisioner, home_path};
@@ -34,17 +35,51 @@ impl UserProvisioner for PlatformUserProvisioner {
             home,
         })
     }
+
+    fn deprovision(&self, user: &str, home: &str) -> Result<(), ProvisionError> {
+        if !cfg!(target_os = "linux") {
+            return Err(ProvisionError::Unsupported);
+        }
+
+        if user_exists(user)? {
+            run("userdel", &["--remove", user], "userdel", user)?;
+        }
+        if group_exists(user)? {
+            run("groupdel", &[user], "groupdel", user)?;
+        }
+        remove_leftover_home(home)?;
+
+        Ok(())
+    }
 }
 
 fn user_exists(slug: &str) -> Result<bool, ProvisionError> {
     let status = Command::new("id")
-        .arg("-u")
-        .arg(slug)
+        .args(["-u", slug])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
         .map_err(|error| command_error("id", slug, error.to_string()))?;
     Ok(status.success())
+}
+
+fn group_exists(slug: &str) -> Result<bool, ProvisionError> {
+    let status = Command::new("getent")
+        .arg("group")
+        .arg(slug)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|error| command_error("getent", slug, error.to_string()))?;
+    Ok(status.success())
+}
+
+fn remove_leftover_home(home: &str) -> Result<(), ProvisionError> {
+    let path = Path::new(home);
+    if !path.exists() || !home.starts_with("/home/") || home.contains("..") {
+        return Ok(());
+    }
+    std::fs::remove_dir_all(path).map_err(|error| command_error("remove", home, error.to_string()))
 }
 
 fn run(program: &str, args: &[&str], action: &str, target: &str) -> Result<(), ProvisionError> {

@@ -49,6 +49,29 @@ pub struct WorkspaceCreate {
 pub struct WorkspaceList {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceDelete {
+    pub slug: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectCreate {
+    pub workspace: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectList {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectDelete {
+    pub workspace: String,
+    pub id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentDefinitionCreate {
     pub name: String,
     pub role: String,
@@ -56,13 +79,32 @@ pub struct AgentDefinitionCreate {
     pub prompt: String,
     #[serde(default)]
     pub tools: Vec<String>,
+    #[serde(default)]
+    pub model: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolList {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModelList {}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SecretList {}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SecretSet {
+    pub model: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentDefinitionList {}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentDefinitionDelete {
+    pub id: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentInstanceCreate {
@@ -95,12 +137,20 @@ pub enum Command {
     ExecutionCancel(ExecutionCancel),
     WorkspaceCreate(WorkspaceCreate),
     WorkspaceList(WorkspaceList),
+    WorkspaceDelete(WorkspaceDelete),
+    ProjectCreate(ProjectCreate),
+    ProjectList(ProjectList),
+    ProjectDelete(ProjectDelete),
     AgentDefinitionCreate(AgentDefinitionCreate),
     AgentDefinitionList(AgentDefinitionList),
+    AgentDefinitionDelete(AgentDefinitionDelete),
     AgentInstanceCreate(AgentInstanceCreate),
     AgentInstanceList(AgentInstanceList),
     AgentInstanceDelete(AgentInstanceDelete),
     ToolList(ToolList),
+    ModelList(ModelList),
+    SecretList(SecretList),
+    SecretSet(SecretSet),
 }
 
 impl Command {
@@ -113,12 +163,20 @@ impl Command {
             Command::ExecutionCancel(_) => types::command::EXECUTION_CANCEL,
             Command::WorkspaceCreate(_) => types::command::WORKSPACE_CREATE,
             Command::WorkspaceList(_) => types::command::WORKSPACE_LIST,
+            Command::WorkspaceDelete(_) => types::command::WORKSPACE_DELETE,
+            Command::ProjectCreate(_) => types::command::PROJECT_CREATE,
+            Command::ProjectList(_) => types::command::PROJECT_LIST,
+            Command::ProjectDelete(_) => types::command::PROJECT_DELETE,
             Command::AgentDefinitionCreate(_) => types::command::AGENT_DEFINITION_CREATE,
             Command::AgentDefinitionList(_) => types::command::AGENT_DEFINITION_LIST,
+            Command::AgentDefinitionDelete(_) => types::command::AGENT_DEFINITION_DELETE,
             Command::AgentInstanceCreate(_) => types::command::AGENT_INSTANCE_CREATE,
             Command::AgentInstanceList(_) => types::command::AGENT_INSTANCE_LIST,
             Command::AgentInstanceDelete(_) => types::command::AGENT_INSTANCE_DELETE,
             Command::ToolList(_) => types::command::TOOL_LIST,
+            Command::ModelList(_) => types::command::MODEL_LIST,
+            Command::SecretList(_) => types::command::SECRET_LIST,
+            Command::SecretSet(_) => types::command::SECRET_SET,
         }
     }
 
@@ -135,11 +193,18 @@ impl Command {
             types::command::EXECUTION_CANCEL => Ok(Command::ExecutionCancel(event.data_as()?)),
             types::command::WORKSPACE_CREATE => Ok(Command::WorkspaceCreate(event.data_as()?)),
             types::command::WORKSPACE_LIST => Ok(Command::WorkspaceList(event.data_as()?)),
+            types::command::WORKSPACE_DELETE => Ok(Command::WorkspaceDelete(event.data_as()?)),
+            types::command::PROJECT_CREATE => Ok(Command::ProjectCreate(event.data_as()?)),
+            types::command::PROJECT_LIST => Ok(Command::ProjectList(event.data_as()?)),
+            types::command::PROJECT_DELETE => Ok(Command::ProjectDelete(event.data_as()?)),
             types::command::AGENT_DEFINITION_CREATE => {
                 Ok(Command::AgentDefinitionCreate(event.data_as()?))
             }
             types::command::AGENT_DEFINITION_LIST => {
                 Ok(Command::AgentDefinitionList(event.data_as()?))
+            }
+            types::command::AGENT_DEFINITION_DELETE => {
+                Ok(Command::AgentDefinitionDelete(event.data_as()?))
             }
             types::command::AGENT_INSTANCE_CREATE => {
                 Ok(Command::AgentInstanceCreate(event.data_as()?))
@@ -149,6 +214,9 @@ impl Command {
                 Ok(Command::AgentInstanceDelete(event.data_as()?))
             }
             types::command::TOOL_LIST => Ok(Command::ToolList(event.data_as()?)),
+            types::command::MODEL_LIST => Ok(Command::ModelList(event.data_as()?)),
+            types::command::SECRET_LIST => Ok(Command::SecretList(event.data_as()?)),
+            types::command::SECRET_SET => Ok(Command::SecretSet(event.data_as()?)),
             other => Err(ProtocolError::UnknownCommand(other.to_owned())),
         }
     }
@@ -195,7 +263,8 @@ mod tests {
                 "name": "Backend Engineer",
                 "role": "backend",
                 "prompt": "work",
-                "tools": ["shell", "editor"]
+                "tools": ["shell", "editor"],
+                "model": "claude-sonnet"
             }),
         );
 
@@ -207,6 +276,70 @@ mod tests {
                 role: "backend".into(),
                 prompt: "work".into(),
                 tools: vec!["shell".into(), "editor".into()],
+                model: "claude-sonnet".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn decodes_agent_definition_delete() {
+        let event = CloudEvent::new(
+            "c1",
+            "/office/client/x",
+            types::command::AGENT_DEFINITION_DELETE,
+            json!({ "id": "backend-engineer" }),
+        );
+
+        let command = Command::from_event(&event).expect("decodes");
+        assert_eq!(
+            command,
+            Command::AgentDefinitionDelete(AgentDefinitionDelete {
+                id: "backend-engineer".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn decodes_model_list() {
+        let event = CloudEvent::new(
+            "c1",
+            "/office/client/x",
+            types::command::MODEL_LIST,
+            json!({}),
+        );
+
+        let command = Command::from_event(&event).expect("decodes");
+        assert_eq!(command, Command::ModelList(ModelList {}));
+    }
+
+    #[test]
+    fn decodes_secret_list() {
+        let event = CloudEvent::new(
+            "c1",
+            "/office/client/x",
+            types::command::SECRET_LIST,
+            json!({}),
+        );
+
+        let command = Command::from_event(&event).expect("decodes");
+        assert_eq!(command, Command::SecretList(SecretList {}));
+    }
+
+    #[test]
+    fn decodes_secret_set() {
+        let event = CloudEvent::new(
+            "c1",
+            "/office/client/x",
+            types::command::SECRET_SET,
+            json!({ "model": "claude-sonnet", "value": "sk-ant-123" }),
+        );
+
+        let command = Command::from_event(&event).expect("decodes");
+        assert_eq!(
+            command,
+            Command::SecretSet(SecretSet {
+                model: "claude-sonnet".into(),
+                value: "sk-ant-123".into(),
             })
         );
     }
@@ -231,6 +364,62 @@ mod tests {
                 agent: "backend-engineer".into(),
                 workspace: "acme".into(),
                 project: "ecommerce".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn decodes_workspace_delete() {
+        let event = CloudEvent::new(
+            "c1",
+            "/office/client/x",
+            types::command::WORKSPACE_DELETE,
+            json!({ "slug": "acme-corp" }),
+        );
+
+        let command = Command::from_event(&event).expect("decodes");
+        assert_eq!(
+            command,
+            Command::WorkspaceDelete(WorkspaceDelete {
+                slug: "acme-corp".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn decodes_project_create() {
+        let event = CloudEvent::new(
+            "c1",
+            "/office/client/x",
+            types::command::PROJECT_CREATE,
+            json!({ "workspace": "acme", "name": "Ecommerce" }),
+        );
+
+        let command = Command::from_event(&event).expect("decodes");
+        assert_eq!(
+            command,
+            Command::ProjectCreate(ProjectCreate {
+                workspace: "acme".into(),
+                name: "Ecommerce".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn decodes_project_delete() {
+        let event = CloudEvent::new(
+            "c1",
+            "/office/client/x",
+            types::command::PROJECT_DELETE,
+            json!({ "workspace": "acme", "id": "ecommerce" }),
+        );
+
+        let command = Command::from_event(&event).expect("decodes");
+        assert_eq!(
+            command,
+            Command::ProjectDelete(ProjectDelete {
+                workspace: "acme".into(),
+                id: "ecommerce".into(),
             })
         );
     }

@@ -2,56 +2,22 @@ import { useState } from "react"
 import {
   Background,
   BackgroundVariant,
-  ConnectionLineType,
-  ConnectionMode,
   Controls,
   MiniMap,
   ReactFlow,
   useReactFlow,
+  type Connection,
   type Edge,
-  type IsValidConnection,
   type Node,
-  type OnConnect,
-  type OnEdgesChange,
-  type OnNodesChange,
-  type OnReconnect,
-  type XYPosition,
 } from "@xyflow/react"
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuLabel,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu"
 
-import { DRAFT_KINDS, DRAFT_LABELS, type DraftKind } from "./model"
+import { GraphContextMenu, type GraphMenuState } from "./GraphContextMenu"
+import { parseNodeId, type DraftKind, type NodeKind } from "./model"
 import { edgeTypes } from "./edgeTypes"
 import { nodeTypes } from "./nodeTypes"
-import { usePointerNodeFocus } from "./state/usePointerNodeFocus"
+import { useGraphStore } from "./state/graphStore"
 
 import "./graph.css"
-
-export interface GraphSurfaceHandlers {
-  onNodesChange: OnNodesChange<Node>
-  onEdgesChange: OnEdgesChange<Edge>
-  onConnect: OnConnect
-  onReconnect: OnReconnect<Edge>
-  isValidConnection: IsValidConnection
-  onNodeClick: (node: Node) => void
-  onNodeDragStop: (node: Node) => void
-  onNodeHover: (id: string | null) => void
-  onEdgeHover: (id: string | null) => void
-  onMenuOpenChange: (open: boolean) => void
-  onCreateDraft: (kind: DraftKind, position: XYPosition) => void
-}
-
-interface GraphSurfaceProps {
-  nodes: Node[]
-  edges: Edge[]
-  handlers: GraphSurfaceHandlers
-}
 
 const MINIMAP_COLORS: Record<string, string> = {
   workspace: "var(--primary)",
@@ -64,79 +30,120 @@ function miniMapColor(node: Node): string {
   return MINIMAP_COLORS[node.type ?? ""] ?? "var(--border)"
 }
 
-export function GraphSurface({ nodes, edges, handlers }: GraphSurfaceProps) {
+interface Pointer {
+  clientX: number
+  clientY: number
+  preventDefault(): void
+}
+
+export function GraphSurface({ onDeleteNode }: { onDeleteNode(kind: NodeKind, id: string): void }) {
+  const nodes = useGraphStore((state) => state.nodes)
+  const edges = useGraphStore((state) => state.edges)
+  const onNodesChange = useGraphStore((state) => state.onNodesChange)
+  const onEdgesChange = useGraphStore((state) => state.onEdgesChange)
+  const select = useGraphStore((state) => state.select)
+  const persistPositions = useGraphStore((state) => state.persistPositions)
+  const setHoveredNode = useGraphStore((state) => state.setHoveredNode)
+  const setHoveredEdge = useGraphStore((state) => state.setHoveredEdge)
+  const startDraft = useGraphStore((state) => state.startDraft)
+  const linkAgent = useGraphStore((state) => state.linkAgent)
+
   const { screenToFlowPosition } = useReactFlow()
-  const [flowPosition, setFlowPosition] = useState<XYPosition | null>(null)
+  const [menu, setMenu] = useState<GraphMenuState | null>(null)
 
-  usePointerNodeFocus(handlers.onNodeHover)
+  const openPaneMenu = (event: Pointer) => {
+    event.preventDefault()
+    setMenu({ x: event.clientX, y: event.clientY, target: null })
+  }
 
-  const openMenu = (event: { clientX: number; clientY: number }) => {
-    setFlowPosition(screenToFlowPosition({ x: event.clientX, y: event.clientY }))
+  const handleConnect = (connection: Connection) => {
+    const source = parseNodeId(connection.source)
+    const target = parseNodeId(connection.target)
+    if (source === null || target === null) {
+      return
+    }
+    const agent = source.kind === "agent" ? source.id : target.kind === "agent" ? target.id : null
+    const project =
+      source.kind === "project" ? source.id : target.kind === "project" ? target.id : null
+    if (agent === null || project === null) {
+      return
+    }
+    linkAgent(agent, project)
+  }
+
+  const isValidConnection = (connection: Edge | Connection): boolean => {
+    const source = parseNodeId(connection.source)
+    const target = parseNodeId(connection.target)
+    if (source === null || target === null) {
+      return false
+    }
+    return (
+      (source.kind === "agent" && target.kind === "project") ||
+      (source.kind === "project" && target.kind === "agent")
+    )
+  }
+
+  const openNodeMenu = (event: Pointer, node: Node) => {
+    event.preventDefault()
+    const parsed = parseNodeId(node.id)
+    setMenu({
+      x: event.clientX,
+      y: event.clientY,
+      target: parsed === null ? null : { kind: parsed.kind, id: parsed.id },
+    })
+  }
+
+  const createDraft = (kind: DraftKind) => {
+    if (menu === null) {
+      return
+    }
+    startDraft(kind, screenToFlowPosition({ x: menu.x, y: menu.y }))
+    setMenu(null)
   }
 
   return (
-    <ContextMenu
-      modal={false}
-      onOpenChange={(open) => {
-        if (!open) {
-          setFlowPosition(null)
-        }
-        handlers.onMenuOpenChange(open)
-      }}
-    >
-      <ContextMenuTrigger asChild>
-        <div className="h-full w-full">
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
-            onNodesChange={handlers.onNodesChange}
-            onEdgesChange={handlers.onEdgesChange}
-            onConnect={handlers.onConnect}
-            onReconnect={handlers.onReconnect}
-            edgesReconnectable
-            isValidConnection={handlers.isValidConnection}
-            onNodeClick={(_event, node) => handlers.onNodeClick(node)}
-            onNodeDragStop={(_event, node) => handlers.onNodeDragStop(node)}
-            onEdgeMouseEnter={(_event, edge) => handlers.onEdgeHover(edge.id)}
-            onEdgeMouseLeave={() => handlers.onEdgeHover(null)}
-            onPaneContextMenu={(event) => openMenu(event)}
-            onNodeContextMenu={(event) => openMenu(event)}
-            connectionMode={ConnectionMode.Strict}
-            connectionLineType={ConnectionLineType.Bezier}
-            connectionLineStyle={{
-              stroke: "var(--primary)",
-              strokeWidth: 1.5,
-              strokeDasharray: "5 5",
-            }}
-            reconnectRadius={16}
-            colorMode="dark"
-            fitView
-            fitViewOptions={{ padding: 0.25 }}
-            minZoom={0.3}
-            maxZoom={1.5}
-          >
-            <Background variant={BackgroundVariant.Dots} gap={22} size={1} />
-            <Controls showInteractive={false} />
-            <MiniMap pannable zoomable nodeColor={miniMapColor} />
-          </ReactFlow>
-        </div>
-      </ContextMenuTrigger>
-      {flowPosition === null ? null : (
-        <ContextMenuContent onCloseAutoFocus={(event) => event.preventDefault()} className="w-48">
-          <ContextMenuLabel>Create</ContextMenuLabel>
-          <ContextMenuSeparator />
-          {DRAFT_KINDS.map((kind) => (
-            <ContextMenuItem
-              key={kind}
-              onSelect={() => handlers.onCreateDraft(kind, flowPosition)}
-            >
-              {DRAFT_LABELS[kind]}
-            </ContextMenuItem>
-          ))}
-        </ContextMenuContent>
+    <div className="h-full w-full" onContextMenu={(event) => event.preventDefault()}>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onNodeClick={(_event, node) => {
+          const parsed = parseNodeId(node.id)
+          select(parsed === null ? null : { kind: parsed.kind, id: parsed.id })
+        }}
+        onPaneClick={() => select(null)}
+        onEdgeClick={() => select(null)}
+        onNodeDragStop={() => persistPositions()}
+        onNodeMouseEnter={(_event, node) => setHoveredNode(node.id)}
+        onNodeMouseLeave={() => setHoveredNode(null)}
+        onEdgeMouseEnter={(_event, edge: Edge) => setHoveredEdge(edge.id)}
+        onEdgeMouseLeave={() => setHoveredEdge(null)}
+        onPaneContextMenu={(event) => openPaneMenu(event)}
+        onNodeContextMenu={(event, node) => openNodeMenu(event, node)}
+        onConnect={handleConnect}
+        isValidConnection={isValidConnection}
+        colorMode="dark"
+        fitView
+        fitViewOptions={{ padding: 0.25 }}
+        minZoom={0.3}
+        maxZoom={1.5}
+      >
+        <Background variant={BackgroundVariant.Dots} gap={22} size={1} />
+        <Controls showInteractive={false} />
+        <MiniMap pannable zoomable nodeColor={miniMapColor} />
+      </ReactFlow>
+
+      {menu === null ? null : (
+        <GraphContextMenu
+          menu={menu}
+          onCreate={createDraft}
+          onDelete={onDeleteNode}
+          onClose={() => setMenu(null)}
+        />
       )}
-    </ContextMenu>
+    </div>
   )
 }

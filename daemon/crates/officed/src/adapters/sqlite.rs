@@ -5,6 +5,9 @@ use agent::{
     AgentDefinition, AgentId, AgentInstance, AgentInstanceRecord, AgentRepository, InstanceId,
     StoreError as AgentStoreError,
 };
+use project::{
+    Project, ProjectId, ProjectRecord, ProjectRepository, StoreError as ProjectStoreError,
+};
 use rusqlite::{Connection, params};
 use workspace::{
     StoreError as WorkspaceStoreError, Workspace, WorkspaceRecord, WorkspaceRepository,
@@ -44,6 +47,20 @@ const MIGRATIONS: &[(&str, &str)] = &[
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../migrations/0005_agent_tool_ids.sql"
+        )),
+    ),
+    (
+        "0006_agent_definition_model",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../migrations/0006_agent_definition_model.sql"
+        )),
+    ),
+    (
+        "0007_projects",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../migrations/0007_projects.sql"
         )),
     ),
 ];
@@ -105,6 +122,35 @@ impl WorkspaceRepository for SqliteStore {
         Ok(())
     }
 
+    fn find(&self, slug: &str) -> Result<Option<WorkspaceRecord>, WorkspaceStoreError> {
+        let connection = self
+            .connection()
+            .map_err(|_| WorkspaceStoreError::Poisoned)?;
+        let mut statement = connection
+            .prepare(
+                "SELECT name, slug, user, home, created_at, status
+                 FROM workspaces WHERE slug = ?1",
+            )
+            .map_err(workspace_backend)?;
+        let mut rows = statement
+            .query_map([slug], |row| {
+                Ok(WorkspaceRecord {
+                    name: row.get(0)?,
+                    slug: row.get(1)?,
+                    user: row.get(2)?,
+                    home: row.get(3)?,
+                    created_at: row.get(4)?,
+                    status: row.get(5)?,
+                })
+            })
+            .map_err(workspace_backend)?;
+
+        match rows.next() {
+            Some(row) => Ok(Some(row.map_err(workspace_backend)?)),
+            None => Ok(None),
+        }
+    }
+
     fn list(&self) -> Result<Vec<WorkspaceRecord>, WorkspaceStoreError> {
         let connection = self
             .connection()
@@ -146,6 +192,15 @@ impl WorkspaceRepository for SqliteStore {
             .map_err(workspace_backend)?;
         Ok(())
     }
+
+    fn remove(&self, slug: &str) -> Result<bool, WorkspaceStoreError> {
+        let affected = self
+            .connection()
+            .map_err(|_| WorkspaceStoreError::Poisoned)?
+            .execute("DELETE FROM workspaces WHERE slug = ?1", params![slug])
+            .map_err(workspace_backend)?;
+        Ok(affected > 0)
+    }
 }
 
 impl AgentRepository for SqliteStore {
@@ -156,13 +211,14 @@ impl AgentRepository for SqliteStore {
             .map_err(|_| AgentStoreError::Poisoned)?
             .execute(
                 "INSERT INTO agent_definitions
-                     (id, name, role, prompt, tools, version, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'), datetime('now'))
+                     (id, name, role, prompt, tools, model, version, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'), datetime('now'))
                  ON CONFLICT(id) DO UPDATE SET
                      name = excluded.name,
                      role = excluded.role,
                      prompt = excluded.prompt,
                      tools = excluded.tools,
+                     model = excluded.model,
                      version = excluded.version,
                      updated_at = datetime('now')",
                 params![
@@ -171,6 +227,7 @@ impl AgentRepository for SqliteStore {
                     definition.role,
                     definition.prompt,
                     tools,
+                    definition.model,
                     definition.version,
                 ],
             )
@@ -182,7 +239,7 @@ impl AgentRepository for SqliteStore {
         let connection = self.connection().map_err(|_| AgentStoreError::Poisoned)?;
         let mut statement = connection
             .prepare(
-                "SELECT id, name, role, prompt, tools, version
+                "SELECT id, name, role, prompt, tools, model, version
                  FROM agent_definitions WHERE id = ?1",
             )
             .map_err(agent_backend)?;
@@ -200,7 +257,7 @@ impl AgentRepository for SqliteStore {
         let connection = self.connection().map_err(|_| AgentStoreError::Poisoned)?;
         let mut statement = connection
             .prepare(
-                "SELECT id, name, role, prompt, tools, version
+                "SELECT id, name, role, prompt, tools, model, version
                  FROM agent_definitions ORDER BY id",
             )
             .map_err(agent_backend)?;
@@ -213,6 +270,15 @@ impl AgentRepository for SqliteStore {
             definitions.push(row.map_err(agent_backend)??);
         }
         Ok(definitions)
+    }
+
+    fn remove_definition(&self, id: &str) -> Result<bool, AgentStoreError> {
+        let affected = self
+            .connection()
+            .map_err(|_| AgentStoreError::Poisoned)?
+            .execute("DELETE FROM agent_definitions WHERE id = ?1", params![id])
+            .map_err(agent_backend)?;
+        Ok(affected > 0)
     }
 
     fn save_instance(&self, instance: &AgentInstance) -> Result<(), AgentStoreError> {
@@ -301,6 +367,71 @@ impl AgentRepository for SqliteStore {
     }
 }
 
+impl ProjectRepository for SqliteStore {
+    fn save(&self, project: &Project) -> Result<(), ProjectStoreError> {
+        self.connection()
+            .map_err(|_| ProjectStoreError::Poisoned)?
+            .execute(
+                "INSERT INTO projects (id, workspace, name, created_at)
+                 VALUES (?1, ?2, ?3, datetime('now'))",
+                params![project.id.as_str(), project.workspace, project.name],
+            )
+            .map_err(project_backend)?;
+        Ok(())
+    }
+
+    fn find(&self, workspace: &str, id: &str) -> Result<Option<ProjectRecord>, ProjectStoreError> {
+        let connection = self.connection().map_err(|_| ProjectStoreError::Poisoned)?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, workspace, name, created_at
+                 FROM projects WHERE workspace = ?1 AND id = ?2",
+            )
+            .map_err(project_backend)?;
+        let mut rows = statement
+            .query_map(params![workspace, id], project_record_row)
+            .map_err(project_backend)?;
+
+        match rows.next() {
+            Some(row) => Ok(Some(row.map_err(project_backend)?)),
+            None => Ok(None),
+        }
+    }
+
+    fn list(&self, workspace: Option<&str>) -> Result<Vec<ProjectRecord>, ProjectStoreError> {
+        let connection = self.connection().map_err(|_| ProjectStoreError::Poisoned)?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, workspace, name, created_at
+                 FROM projects
+                 WHERE (?1 IS NULL OR workspace = ?1)
+                 ORDER BY created_at, id",
+            )
+            .map_err(project_backend)?;
+        let rows = statement
+            .query_map(params![workspace], project_record_row)
+            .map_err(project_backend)?;
+
+        let mut records = Vec::new();
+        for row in rows {
+            records.push(row.map_err(project_backend)?);
+        }
+        Ok(records)
+    }
+
+    fn remove(&self, workspace: &str, id: &str) -> Result<bool, ProjectStoreError> {
+        let affected = self
+            .connection()
+            .map_err(|_| ProjectStoreError::Poisoned)?
+            .execute(
+                "DELETE FROM projects WHERE workspace = ?1 AND id = ?2",
+                params![workspace, id],
+            )
+            .map_err(project_backend)?;
+        Ok(affected > 0)
+    }
+}
+
 fn definition_row(
     row: &rusqlite::Row<'_>,
 ) -> rusqlite::Result<Result<AgentDefinition, AgentStoreError>> {
@@ -309,7 +440,8 @@ fn definition_row(
     let role: String = row.get(2)?;
     let prompt: String = row.get(3)?;
     let tools: String = row.get(4)?;
-    let version: i64 = row.get(5)?;
+    let model: String = row.get(5)?;
+    let version: i64 = row.get(6)?;
 
     let parsed = serde_json::from_str::<Vec<String>>(&tools)
         .map_err(|error| AgentStoreError::Backend(Box::new(error)));
@@ -319,6 +451,7 @@ fn definition_row(
         role,
         prompt,
         tools,
+        model,
         version: version as u32,
     }))
 }
@@ -339,6 +472,15 @@ fn instance_record_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentInstanc
         workspace: row.get(2)?,
         project: row.get(3)?,
         created_at: row.get(4)?,
+    })
+}
+
+fn project_record_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectRecord> {
+    Ok(ProjectRecord {
+        id: ProjectId(row.get(0)?),
+        workspace: row.get(1)?,
+        name: row.get(2)?,
+        created_at: row.get(3)?,
     })
 }
 
@@ -389,6 +531,15 @@ fn agent_backend(error: rusqlite::Error) -> AgentStoreError {
     AgentStoreError::Backend(Box::new(error))
 }
 
+fn project_backend(error: rusqlite::Error) -> ProjectStoreError {
+    if let rusqlite::Error::SqliteFailure(sql_error, _) = &error
+        && sql_error.code == rusqlite::ErrorCode::ConstraintViolation
+    {
+        return ProjectStoreError::Conflict;
+    }
+    ProjectStoreError::Backend(Box::new(error))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -409,6 +560,7 @@ mod tests {
             role: "backend".to_owned(),
             prompt: "prompt".to_owned(),
             tools: vec!["shell".to_owned(), "editor".to_owned()],
+            model: "claude-sonnet".to_owned(),
             version,
         }
     }
@@ -425,9 +577,32 @@ mod tests {
     #[test]
     fn saves_and_lists_workspaces() {
         let store = SqliteStore::open_in_memory().expect("opens");
-        store.save(&workspace("acme")).expect("saves");
+        WorkspaceRepository::save(&store, &workspace("acme")).expect("saves");
 
-        assert_eq!(store.list().expect("lists")[0].slug, "acme");
+        assert_eq!(
+            WorkspaceRepository::list(&store).expect("lists")[0].slug,
+            "acme"
+        );
+    }
+
+    #[test]
+    fn finds_and_removes_workspaces() {
+        let store = SqliteStore::open_in_memory().expect("opens");
+        WorkspaceRepository::save(&store, &workspace("acme")).expect("saves");
+
+        let found = WorkspaceRepository::find(&store, "acme")
+            .expect("finds")
+            .expect("present");
+        assert_eq!(found.home, "/home/acme");
+        assert!(
+            WorkspaceRepository::find(&store, "ghost")
+                .expect("finds")
+                .is_none()
+        );
+
+        assert!(WorkspaceRepository::remove(&store, "acme").expect("removes"));
+        assert!(!WorkspaceRepository::remove(&store, "acme").expect("removes"));
+        assert!(WorkspaceRepository::list(&store).expect("lists").is_empty());
     }
 
     #[test]
@@ -444,6 +619,7 @@ mod tests {
         assert_eq!(definitions.len(), 1);
         assert_eq!(definitions[0].version, 2);
         assert_eq!(definitions[0].tools, vec!["shell", "editor"]);
+        assert_eq!(definitions[0].model, "claude-sonnet");
     }
 
     #[test]
@@ -486,5 +662,77 @@ mod tests {
                 .remove_instance("backend-engineer", "acme", "mobile")
                 .expect("removes")
         );
+    }
+
+    #[test]
+    fn saves_lists_and_removes_projects() {
+        let store = SqliteStore::open_in_memory().expect("opens");
+        ProjectRepository::save(
+            &store,
+            &Project {
+                id: ProjectId("ecommerce".to_owned()),
+                workspace: "acme".to_owned(),
+                name: "Ecommerce".to_owned(),
+            },
+        )
+        .expect("saves");
+        ProjectRepository::save(
+            &store,
+            &Project {
+                id: ProjectId("mobile".to_owned()),
+                workspace: "acme".to_owned(),
+                name: "Mobile".to_owned(),
+            },
+        )
+        .expect("saves");
+        ProjectRepository::save(
+            &store,
+            &Project {
+                id: ProjectId("ecommerce".to_owned()),
+                workspace: "foo".to_owned(),
+                name: "Ecommerce".to_owned(),
+            },
+        )
+        .expect("saves");
+
+        assert_eq!(
+            ProjectRepository::list(&store, None).expect("lists").len(),
+            3
+        );
+        assert_eq!(
+            ProjectRepository::list(&store, Some("acme"))
+                .expect("lists")
+                .len(),
+            2
+        );
+        let found = ProjectRepository::find(&store, "acme", "ecommerce")
+            .expect("finds")
+            .expect("present");
+        assert_eq!(found.name, "Ecommerce");
+        assert!(
+            ProjectRepository::find(&store, "acme", "ghost")
+                .expect("finds")
+                .is_none()
+        );
+
+        assert!(ProjectRepository::remove(&store, "acme", "mobile").expect("removes"));
+        assert!(!ProjectRepository::remove(&store, "acme", "mobile").expect("removes"));
+        assert_eq!(
+            ProjectRepository::list(&store, None).expect("lists").len(),
+            2
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_project_in_same_workspace() {
+        let store = SqliteStore::open_in_memory().expect("opens");
+        let project = Project {
+            id: ProjectId("ecommerce".to_owned()),
+            workspace: "acme".to_owned(),
+            name: "Ecommerce".to_owned(),
+        };
+        ProjectRepository::save(&store, &project).expect("saves");
+        let error = ProjectRepository::save(&store, &project).unwrap_err();
+        assert!(matches!(error, ProjectStoreError::Conflict));
     }
 }

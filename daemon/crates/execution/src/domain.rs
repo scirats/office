@@ -90,6 +90,10 @@ impl ExecutionState {
 pub enum LogStream {
     Stdout,
     Stderr,
+
+    Tool,
+
+    ToolResult,
 }
 
 impl LogStream {
@@ -97,6 +101,8 @@ impl LogStream {
         match self {
             LogStream::Stdout => "stdout",
             LogStream::Stderr => "stderr",
+            LogStream::Tool => "tool",
+            LogStream::ToolResult => "tool-result",
         }
     }
 }

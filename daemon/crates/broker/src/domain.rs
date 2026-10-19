@@ -40,12 +40,6 @@ pub struct StoredEvent {
     pub payload: Vec<u8>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Publish {
-    pub sequence: u64,
-    pub recipients: Vec<ConnectionId>,
-}
-
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum ReplayError {
     #[error("resync required for {subject}: oldest retained sequence is {oldest}")]

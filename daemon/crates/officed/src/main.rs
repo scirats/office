@@ -3,7 +3,14 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use officed::Daemon;
-use officed::adapters::{PlatformWorkspaceInspector, SqliteStore};
+use officed::adapters::{
+    FileModelCatalog, FileSecretStore, PlatformUserProvisioner, PlatformWorkspaceInspector,
+    ReqwestHttpClient, SqliteStore,
+};
+
+use model::ModelCatalog;
+use secret::SecretStore;
+use tracing_subscriber::EnvFilter;
 
 const DEFAULT_SOCKET: &str = "/run/office/office.sock";
 const DEFAULT_DB: &str = "/var/lib/office/state.sqlite";
@@ -11,6 +18,13 @@ const DEFAULT_ADDR: &str = "127.0.0.1:7717";
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .compact()
+        .init();
+
     let socket_path = std::env::var_os("OFFICE_SOCKET")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(DEFAULT_SOCKET));
@@ -39,22 +53,61 @@ async fn main() -> std::io::Result<()> {
         ))
     })?;
     let agent_store = store.clone();
+    let workspace_store = store.clone();
+    let project_store = store;
 
-    match tcp_addr {
-        Some(addr) => eprintln!(
-            "office: listening on {} and tcp {addr}, state {database}",
-            socket_path.display()
-        ),
-        None => eprintln!(
-            "office: listening on {}, state {database}",
-            socket_path.display()
-        ),
+    tracing::info!(
+        socket = %socket_path.display(),
+        tcp = ?tcp_addr,
+        database = %database,
+        "office listening"
+    );
+
+    let models_path = FileModelCatalog::path_from_env();
+    let models: Box<dyn ModelCatalog> = if models_path.exists() {
+        match FileModelCatalog::load(&models_path) {
+            Ok(catalog) => Box::new(catalog),
+            Err(error) => {
+                return Err(std::io::Error::other(format!(
+                    "invalid models config '{}': {error}",
+                    models_path.display()
+                )));
+            }
+        }
+    } else {
+        tracing::warn!(
+            path = %models_path.display(),
+            "models config not found; model catalog is empty"
+        );
+        Box::new(FileModelCatalog::empty())
+    };
+
+    let secrets_path = FileSecretStore::path_from_env();
+    if !secrets_path.exists() {
+        tracing::warn!(
+            path = %secrets_path.display(),
+            "secrets file not found; it will be created on first set"
+        );
     }
+    let secrets: Box<dyn SecretStore> = match FileSecretStore::open(&secrets_path) {
+        Ok(store) => Box::new(store),
+        Err(error) => {
+            return Err(std::io::Error::other(format!(
+                "invalid secrets file '{}': {error}",
+                secrets_path.display()
+            )));
+        }
+    };
 
-    let mut daemon = Daemon::new(
-        Box::new(store),
+    let mut daemon = Daemon::with_adapters(
+        Box::new(PlatformUserProvisioner),
+        Box::new(workspace_store),
         Box::new(agent_store),
+        Box::new(project_store),
         Box::new(PlatformWorkspaceInspector),
+        models,
+        secrets,
+        std::sync::Arc::new(ReqwestHttpClient::new()),
     );
     if let Some(seconds) = std::env::var("OFFICE_RECONCILE_SECS")
         .ok()

@@ -1,13 +1,9 @@
-export interface WorkspaceAgent {
-  id: string
-  name: string
-  role: string
-}
+import type { AgentRef } from "./agent/types"
 
 export interface WorkspaceProject {
   id: string
   name: string
-  agents: WorkspaceAgent[]
+  agents: AgentRef[]
 }
 
 export interface WorkspaceDetail {

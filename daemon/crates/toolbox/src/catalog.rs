@@ -1,7 +1,6 @@
 use serde_json::json;
 use tool::{Tool, ToolCatalog, ToolId};
 
-/// The tools that exist in the system, defined in code (not via the API).
 pub struct BuiltinToolCatalog;
 
 fn tool(id: &str, description: &str, parameters: serde_json::Value) -> Tool {

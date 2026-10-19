@@ -13,9 +13,6 @@ impl std::fmt::Display for ToolId {
     }
 }
 
-/// A function the model can call, in the tool-calling sense: a name, a
-/// description, and a JSON Schema for its arguments (matching the `function`
-/// object of the OpenAI/DeepSeek tools API).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tool {
     pub id: ToolId,

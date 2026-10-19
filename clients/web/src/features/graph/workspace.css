@@ -1,3 +1,7 @@
+.office-desktop {
+  contain: paint;
+}
+
 .office-winbox {
   border-radius: 12px;
   overflow: hidden;

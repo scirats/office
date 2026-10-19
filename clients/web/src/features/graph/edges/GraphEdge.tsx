@@ -1,21 +1,23 @@
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from "@xyflow/react"
-import { X } from "lucide-react"
+import { BaseEdge, getBezierPath, type EdgeProps } from "@xyflow/react"
 
-import { useGraphActions } from "../state/actions"
+import { assignmentEndpoints, projectKey } from "../model"
+import { focusClassName } from "../state/focus"
+import { useGraphFocus } from "../state/focusContext"
+import { useGraphStore } from "../state/graphStore"
 
 export function GraphEdge({
   id,
+  source,
+  target,
   sourceX,
   sourceY,
-  sourcePosition,
   targetX,
   targetY,
+  sourcePosition,
   targetPosition,
-  markerEnd,
-  interactionWidth,
-  selected,
 }: EdgeProps) {
-  const actions = useGraphActions()
+  const focus = useGraphFocus()
+  const unlinkAgent = useGraphStore((state) => state.unlinkAgent)
   const [path, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -24,32 +26,27 @@ export function GraphEdge({
     targetY,
     targetPosition,
   })
+  const assignment = assignmentEndpoints({ source, target })
 
   return (
     <>
-      <BaseEdge
-        id={id}
-        path={path}
-        markerEnd={markerEnd}
-        interactionWidth={interactionWidth}
-      />
-      {selected ? (
-        <EdgeLabelRenderer>
-          <button
-            type="button"
-            className="nodrag nopan absolute grid size-5 cursor-pointer place-items-center rounded-full border border-border bg-muted text-muted-foreground shadow-sm transition-colors hover:bg-destructive hover:text-background"
-            style={{
-              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-              pointerEvents: "all",
-            }}
-            aria-label="Remove link"
-            title="Remove link"
-            onClick={() => actions.removeEdge(id)}
-          >
-            <X className="size-3" strokeWidth={2.5} aria-hidden="true" />
-          </button>
-        </EdgeLabelRenderer>
-      ) : null}
+      <BaseEdge id={id} path={path} className={focusClassName(focus, id, "edge")} />
+      {assignment === null ? null : (
+        <g
+          className="graph-edge-delete nodrag nopan"
+          transform={`translate(${labelX}, ${labelY})`}
+          onClick={(event) => {
+            event.stopPropagation()
+            unlinkAgent(assignment.agent, projectKey(assignment.workspace, assignment.project))
+          }}
+          onMouseDown={(event) => event.stopPropagation()}
+          aria-label="Unlink agent from project"
+        >
+          <circle className="graph-edge-delete-bg" r={9} />
+          <line className="graph-edge-delete-mark" x1={-3} y1={-3} x2={3} y2={3} />
+          <line className="graph-edge-delete-mark" x1={-3} y1={3} x2={3} y2={-3} />
+        </g>
+      )}
     </>
   )
 }
